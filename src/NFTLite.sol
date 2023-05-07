@@ -12,73 +12,59 @@
 
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.17;
-
-import "./ERC721.sol";
-import "./ERC721Enumerable.sol";
-import "./Administered.sol";
+// optimization at 200 runs
 
 
-contract NFTLite is
-    Administered,
-    ERC721,
-    ERC721Enumerable
+contract NFTLite
 {
-    bool public mintIsActive = true;
-    uint256 public mintPrice;
+    address public owner;
+    string public name;
+    string public symbol;
     uint256 public supply;
+    uint256 public mintPrice;
 
-    mapping(uint256 => string) public URIs;
+    mapping(uint256 => address) public owners;
+    mapping(uint256 => string) public uri;
+
+    // events
+    event Transfer(address from, address to, uint256 tokenId);
 
     // errors
-    error MintNotActive();
+    error ZeroAddress();
     error BadMintValue();
+    error NotTheOwner();
 
     constructor(
+        string memory _name,
+        string memory _symbol,
         uint256 _mintPrice
     )
-        Administered(msg.sender)
-        ERC721("Toby's NFTs", "TNFT")
     {
+        owner = msg.sender;
+        name = _name;
+        symbol = _symbol;
         mintPrice = _mintPrice;
-    }
-
-    /**
-     * @dev Overrides for ERC721Enumerable.
-     */
-    function _beforeTokenTransfer(
-        address from,
-        address to,
-        uint256 tokenId,
-        uint256 batchSize
-    ) internal override(ERC721, ERC721Enumerable) {
-        super._beforeTokenTransfer(from, to, tokenId, batchSize);
-    }
-
-    /**
-     * @dev Switches the mint from active <-> inactive.
-     */
-    function flipMintState() external onlyAdmin {
-        mintIsActive = !mintIsActive;
     }
 
     /**
      * @dev   Allows owner to set the mint price dynamically.
      * @param _mintPrice The new mint price.
      */
-    function setMintPrice(uint256 _mintPrice) external onlyAdmin {
+    function setMintPrice(uint256 _mintPrice) external {
+        if (msg.sender != owner) revert NotTheOwner();
         mintPrice = _mintPrice;
     }
 
     /**
      * @dev   Returns the URI for the given token.
-     * @param tokenId The token to return the URI for.
+     * @param _tokenId The token to return the URI for.
      */
-    function tokenURI(uint256 tokenId)
+    function tokenURI(uint256 _tokenId)
         public
         view
         returns (string memory)
     {
-        return URIs[tokenId];
+        return uri[_tokenId];
     }
 
     /**
@@ -86,18 +72,45 @@ contract NFTLite is
      * @param _uri The universal resource identifier containing the metadata json file
      */
     function createNFT(string memory _uri) external payable {
-        if (!mintIsActive) revert MintNotActive();
+        if (msg.sender == address(0)) revert ZeroAddress();
         if (mintPrice != msg.value) revert BadMintValue();
         uint256 mintedId = supply;
         supply = supply + 1;
-        URIs[mintedId] = _uri;
-        _mint(msg.sender, mintedId);
+        uri[mintedId] = _uri;
+        owners[mintedId] = msg.sender;
+        emit Transfer(address(0), msg.sender, mintedId);
+    }
+
+    /**
+     * @dev Transfers `tokenId` from `from` to `to`.
+     *  As opposed to {transferFrom}, this imposes no restrictions on msg.sender.
+     *
+     * Requirements:
+     *
+     * - `to` cannot be the zero address.
+     * - `tokenId` token must be owned by `from`.
+     *
+     * Emits a {Transfer} event.
+     */
+    function transfer(address _to, uint256 _tokenId) external {
+        if (msg.sender != ownerOf(_tokenId)) revert NotTheOwner();
+        if (_to == address(0)) revert ZeroAddress();
+        owners[_tokenId] = _to;
+        emit Transfer(msg.sender, _to, _tokenId);
+    }
+
+    /** 
+     * @dev Returns the owner of the `tokenId`.
+     */
+    function ownerOf(uint256 _tokenId) public view returns (address) {
+        return owners[_tokenId];
     }
 
     /**
      * @dev Withdraw contract's balance.
      */
-    function withdrawETHBalance() external onlyAdmin {
+    function withdrawETHBalance() external {
+        if (msg.sender != owner) revert NotTheOwner();
         payable(msg.sender).transfer(address(this).balance);
     }
 }
