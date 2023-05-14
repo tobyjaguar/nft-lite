@@ -74,6 +74,7 @@ contract NFTLite
     function createNFT(string memory _uri) external payable {
         if (msg.sender == address(0)) revert ZeroAddress();
         if (mintPrice != msg.value) revert BadMintValue();
+        if (msg.sender != owner) revert NotTheOwner();
         uint256 mintedId = supply;
         supply = supply + 1;
         uri[mintedId] = _uri;
